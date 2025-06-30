@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+<title>太陽系惑星 - 3Dモデル</title>
+<style>
+body {
+margin: 0;
+padding: 0;
+overflow: hidden;
+background-color: #000;
+touch-action: none;
+font-family: Arial, sans-serif;
+}
+canvas {
+display: block;
+width: 100%;
+height: 100vh;
+}
+#controls {
+position: absolute;
+bottom: 20px;
+left: 0;
+right: 0;
+display: flex;
+justify-content: center;
+z-index: 100;
+flex-wrap: wrap;
+}
+.planet-btn {
+margin: 0 5px;
+padding: 8px 12px;
+background-color: rgba(0, 0, 0, 0.7);
+color: white;
+border: 1px solid rgba(255, 255, 255, 0.5);
+border-radius: 20px;
+font-size: 12px;
+cursor: pointer;
+touch-action: manipulation;
+}
+.planet-btn:active {
+background-color: rgba(255, 255, 255, 0.2);
+}
+#speed-controls {
+position: absolute;
+top: 20px;
+right: 20px;
+z-index: 100;
+display: flex;
+flex-direction: column;
+align-items: flex-end;
+}
+.speed-btn {
+margin: 5px 0;
+padding: 8px 12px;
+background-color: rgba(0, 0, 0, 0.7);
+color: white;
+border: 1px solid rgba(255, 255, 255, 0.5);
+border-radius: 20px;
+font-size: 12px;
+cursor: pointer;
+touch-action: manipulation;
+}
+.speed-btn.active {
+background-color: rgba(255, 255, 255, 0.3);
+font-weight: bold;
+}
+#time-display {
+position: absolute;
+top: 20px;
+left: 20px;
+background-color: rgba(0, 0, 0, 0.7);
+color: white;
+padding: 10px;
+border-radius: 10px;
+font-size: 14px;
+z-index: 100;
+border: 1px solid rgba(255, 255, 255, 0.3);
+}
+#info-panel {
+position: absolute;
+top: 0;
+left: 0;
+right: 0;
+background-color: rgba(0, 0, 0, 0.8);
+color: white;
+padding: 15px;
+z-index: 200;
+display: none;
+max-height: 50%;
+overflow-y: auto;
+}
+#info-panel h2 {
+margin-top: 0;
+color: #ffcc00;
+font-size: 18px;
+text-align: center;
+}
+#info-panel p {
+margin: 10px 0;
+font-size: 14px;
+line-height: 1.4;
+white-space: pre-line;
+}
+#close-btn {
+position: absolute;
+top: 10px;
+right: 10px;
+background: none;
+border: none;
+color: white;
+font-size: 20px;
+cursor: pointer;
+}
+.planet-label {
+position: absolute;
+color: white;
+background-color: rgba(0, 0, 0, 0.6);
+padding: 3px 6px;
+border-radius: 10px;
+font-size: 10px;
+z-index: 100;
+pointer-events: none;
+border: 1px solid rgba(255, 255, 255, 0.3);
+transform: translate(-50%, -50%);
+}
+</style>
+</head>
+<body>
+<div id="info-panel">
+<button id="close-btn">×</button>
+<h2 id="planet-name">惑星名</h2>
+<p id="planet-desc">説明が表示されます。</p>
+</div>
+
+```
+<div id="time-display">
+時間: 0日 0時間
+</div>
+
+<div id="speed-controls">
+<button class="speed-btn active" data-speed="1">速度 x1</button>
+<button class="speed-btn" data-speed="2">速度 x2</button>
+<button class="speed-btn" data-speed="4">速度 x4</button>
+<button class="speed-btn" data-speed="8">速度 x8</button>
+</div>
+
+<div id="controls">
+<button class="planet-btn" data-planet="sun">太陽</button>
+<button class="planet-btn" data-planet="mercury">水星</button>
+<button class="planet-btn" data-planet="venus">金星</button>
+<button class="planet-btn" data-planet="earth">地球</button>
+<button class="planet-btn" data-planet="mars">火星</button>
+<button class="planet-btn" data-planet="jupiter">木星</button>
+<button class="planet-btn" data-planet="saturn">土星</button>
+<button class="planet-btn" data-planet="uranus">天王星</button>
+<button class="planet-btn" data-planet="neptune">海王星</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// 惑星データ
+const planetData = [
+{
+name: "sun",
+japName: "太陽 (Sun)",
+radius: 6,
+color: 0xFFA500,
+rotationSpeed: 0.001,
+orbitRadius: 0,
+orbitPeriodDays: 0,
+description: "太陽系の中心に位置する恒星。表面温度は約5,500℃、核心部では1,500万℃にも達します。水素からヘリウムへの核融合反応によってエネルギーを生み出しています。太陽の質量は地球の約33万倍で、直径は約139万km（地球の約109倍）です。太陽光が地球に届くまでには約8分20秒かかります。"
+},
+{
+name: "mercury",
+japName: "水星 (Mercury)",
+radius: 0.5,
+color: 0xa6a6a6,
+rotationSpeed: 0.004,
+orbitRadius: 10,
+orbitPeriodDays: 88,
+description: "太陽に最も近い惑星で、表面温度は昼間で430℃、夜間では-180℃まで下がります。地球の約3分の1ほどの大きさで、自転周期は約59日、公転周期は約88日です。クレーターが多く存在し、大気はほとんどありません。表面は岩石質で、鉄分が多く含まれています。"
+},
+{
+name: "venus",
+japName: "金星 (Venus)",
+radius: 0.9,
+color: 0xe6e6cc,
+rotationSpeed: 0.002,
+orbitRadius: 15,
+orbitPeriodDays: 225,
+description: "太陽系で2番目に近い惑星で、大きさは地球とほぼ同じです。二酸化炭素を主成分とする厚い大気に覆われており、温室効果により表面温度は約460℃と非常に高温です。大気圧は地球の約90倍。逆行自転をしており、1日が地球の243日に相当します。表面には火山や溶岩流の痕跡が見られます。"
+},
+{
+name: "earth",
+japName: "地球 (Earth)",
+radius: 1.2,
+color: 0x1E90FF,
+rotationSpeed: 0.01,
+orbitRadius: 20,
+isEarth: true,
+orbitPeriodDays: 365,
+description: "太陽系で3番目の惑星。生命が存在する唯一の天体として知られています。表面の約71%が水で覆われており、窒素と酸素を主成分とする大気があります。自転周期は約24時間、公転周期は約365.25日。内部は核、マントル、地殻の3層構造になっています。月を衛星として持っています。"
+},
+{
+name: "mars",
+japName: "火星 (Mars)",
+radius: 0.7,
+color: 0xff5500,
+rotationSpeed: 0.018,
+orbitRadius: 25,
+orbitPeriodDays: 687,
+description: "太陽系で4番目の惑星。「赤い惑星」と呼ばれ、表面の酸化鉄が特徴的な赤茶色を呈しています。地球の約半分の大きさで、自転周期は地球とほぼ同じ約24.6時間、公転周期は約687日です。極地には氷の帽子があり、過去に液体の水が存在した痕跡があります。2つの小さな衛星（フォボスとダイモス）を持っています。"
+},
+{
+name: "jupiter",
+japName: "木星 (Jupiter)",
+radius: 2.5,
+color: 0xffaa66,
+rotationSpeed: 0.04,
+orbitRadius: 32,
+orbitPeriodDays: 4333,
+description: "太陽系最大の惑星で、質量は地球の318倍、直径は地球の約11倍です。主に水素とヘリウムからなるガス惑星で、特徴的な縞模様と大赤斑（巨大な嵐）が見られます。自転周期は約10時間と非常に速く、公転周期は約12年です。79個以上の衛星を持ち、そのうちの4つ（イオ、エウロパ、ガニメデ、カリスト）はガリレオ衛星と呼ばれています。"
+},
+{
+name: "saturn",
+japName: "土星 (Saturn)",
+radius: 2.2,
+color: 0xddbb88,
+rotationSpeed: 0.038,
+orbitRadius: 40,
+hasRings: true,
+orbitPeriodDays: 10759,
+description: "太陽系で2番目に大きな惑星で、最も顕著な特徴は美しい環（リング）です。この環は氷の粒子や岩石の破片でできています。土星自体は木星と同様にガス惑星で、主に水素とヘリウムで構成されています。自転周期は約10.7時間、公転周期は約29.5年です。83個以上の衛星があり、最大の衛星はタイタンで、厚い大気を持っています。"
+},
+{
+name: "uranus",
+japName: "天王星 (Uranus)",
+radius: 1.8,
+color: 0x99ccff,
+rotationSpeed: 0.03,
+orbitRadius: 46,
+orbitPeriodDays: 30687,
+description: "太陽系で7番目の惑星で、氷の巨人と分類されます。メタンガスにより青緑色に見え、他の惑星と異なり横向きに回転しています（自転軸が公転面に対して約98度傾いています）。地球の約4倍の直径を持ち、自転周期は約17.2時間、公転周期は約84年です。少なくとも27個の衛星と13本の環を持っています。"
+},
+{
+name: "neptune",
+japName: "海王星 (Neptune)",
+radius: 1.7,
+color: 0x3366ff,
+rotationSpeed: 0.032,
+orbitRadius: 52,
+orbitPeriodDays: 60190,
+description: "太陽系で8番目、最も外側の惑星です。天王星と同様に氷の巨人に分類され、メタンの存在により濃い青色を呈しています。地球の約3.9倍の直径を持ち、自転周期は約16.1時間、公転周期は約165年です。最大の特徴は強力な風で、太陽系内で最も風速が速く、最大で時速2,100kmに達します。14個の衛星と6本の環を持っています。"
+}
+];
+
+// Three.js 初期設定
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// カメラの初期位置
+camera.position.set(0, 20, 80);
+
+// ライティング
+const ambientLight = new THREE.AmbientLight(0x555555, 0.6);
+scene.add(ambientLight);
+
+const sunLight = new THREE.PointLight(0xffffff, 1.5, 1000);
+sunLight.position.set(0, 0, 0);
+scene.add(sunLight);
+
+// 背景の星空
+const starsGeometry = new THREE.BufferGeometry();
+const starsMaterial = new THREE.PointsMaterial({
+color: 0xffffff,
+size: 0.5,
+sizeAttenuation: false
+});
+
+const starsVertices = [];
+for (let i = 0; i < 3000; i++) {
+const x = THREE.MathUtils.randFloatSpread(2000);
+const y = THREE.MathUtils.randFloatSpread(2000);
+const z = THREE.MathUtils.randFloatSpread(2000);
+starsVertices.push(x, y, z);
+}
+
+starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+const starField = new THREE.Points(starsGeometry, starsMaterial);
+scene.add(starField);
+
+// 惑星とラベルの配列
+const planets = [];
+const orbits = [];
+const labels = {};
+
+// 惑星作成
+planetData.forEach((data) => {
+// ラベル作成
+const label = document.createElement('div');
+label.className = 'planet-label';
+label.textContent = data.japName;
+document.body.appendChild(label);
+labels[data.name] = label;
+
+// 惑星の作成
+const geometry = new THREE.SphereGeometry(data.radius, 32, 32);
+let planetMesh;
+
+if (data.name === "sun") {
+// 太陽
+const material = new THREE.MeshBasicMaterial({ color: data.color });
+planetMesh = new THREE.Mesh(geometry, material);
+
+// グロー効果
+const glowGeo = new THREE.SphereGeometry(data.radius * 1.2, 32, 32);
+const glowMat = new THREE.MeshBasicMaterial({
+color: 0xFFD700,
+transparent: true,
+opacity: 0.15,
+side: THREE.BackSide
+});
+const glow = new THREE.Mesh(glowGeo, glowMat);
+planetMesh.add(glow);
+
+} else if (data.isEarth) {
+// 地球
+const material = new THREE.MeshPhongMaterial({
+color: data.color,
+shininess: 15
+});
+planetMesh = new THREE.Mesh(geometry, material);
+
+// 雲
+const cloudGeo = new THREE.SphereGeometry(data.radius * 1.03, 32, 32);
+const cloudMat = new THREE.MeshBasicMaterial({
+color: 0xffffff,
+transparent: true,
+opacity: 0.3
+});
+const clouds = new THREE.Mesh(cloudGeo, cloudMat);
+planetMesh.add(clouds);
+planetMesh.userData.clouds = clouds;
+
+} else if (data.hasRings) {
+// 土星
+const material = new THREE.MeshPhongMaterial({
+color: data.color,
+shininess: 5
+});
+planetMesh = new THREE.Mesh(geometry, material);
+
+// 土星の輪
+const ringGeo = new THREE.RingGeometry(data.radius + 0.5, data.radius + 2, 32);
+const ringMat = new THREE.MeshBasicMaterial({
+color: 0xbbaa88,
+side: THREE.DoubleSide,
+transparent: true,
+opacity: 0.7
+});
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.rotation.x = Math.PI / 2;
+planetMesh.add(ring);
+
+} else {
+// その他の惑星
+const material = new THREE.MeshPhongMaterial({
+color: data.color,
+shininess: 5
+});
+planetMesh = new THREE.Mesh(geometry, material);
+}
+
+// 惑星の位置設定
+if (data.orbitRadius > 0) {
+planetMesh.position.x = data.orbitRadius;
+}
+
+planetMesh.userData = { name: data.name };
+scene.add(planetMesh);
+
+// 惑星データを保存
+const planetObj = {
+mesh: planetMesh,
+rotationSpeed: data.rotationSpeed,
+orbitRadius: data.orbitRadius,
+orbitSpeed: data.orbitRadius > 0 ? 0.005 / Math.sqrt(data.orbitRadius) : 0,
+orbitAngle: Math.random() * Math.PI * 2,
+orbitPeriodDays: data.orbitPeriodDays,
+name: data.name
+};
+
+planets.push(planetObj);
+
+// 軌道作成（太陽以外）
+if (data.orbitRadius > 0) {
+const orbitGeo = new THREE.RingGeometry(data.orbitRadius - 0.05, data.orbitRadius + 0.05, 64);
+const orbitMat = new THREE.MeshBasicMaterial({
+color: data.isEarth ? 0x77ADFF : 0x444444,
+side: THREE.DoubleSide,
+transparent: true,
+opacity: data.isEarth ? 0.4 : 0.2
+});
+const orbit = new THREE.Mesh(orbitGeo, orbitMat);
+orbit.rotation.x = Math.PI / 2;
+scene.add(orbit);
+orbits.push(orbit);
+}
+});
+
+// 速度制御
+let speedMultiplier = 1;
+
+// タッチ操作の変数
+let touchX = 0, touchY = 0, prevTouchX = 0, prevTouchY = 0;
+let isRotating = false, isDragging = false;
+let distance = 0, prevDistance = 0;
+
+// タッチイベント
+function handleTouchStart(event) {
+if (event.target.closest('#speed-controls') ||
+event.target.closest('#controls') ||
+event.target.id === 'close-btn') {
+return;
+}
+
+event.preventDefault();
+isRotating = true;
+
+if (event.touches.length === 1) {
+const touch = event.touches[0];
+touchX = prevTouchX = touch.clientX;
+touchY = prevTouchY = touch.clientY;
+isDragging = true;
+} else if (event.touches.length === 2) {
+const dx = event.touches[0].clientX - event.touches[1].clientX;
+const dy = event.touches[0].clientY - event.touches[1].clientY;
+distance = prevDistance = Math.sqrt(dx * dx + dy * dy);
+isDragging = false;
+}
+}
+
+function handleTouchMove(event) {
+if (!isRotating) return;
+event.preventDefault();
+
+if (event.touches.length === 1 && isDragging) {
+const touch = event.touches[0];
+const deltaX = touch.clientX - prevTouchX;
+const deltaY = touch.clientY - prevTouchY;
+
+scene.rotation.y += deltaX * 0.01;
+scene.rotation.x += deltaY * 0.01;
+
+prevTouchX = touch.clientX;
+prevTouchY = touch.clientY;
+
+} else if (event.touches.length === 2) {
+const dx = event.touches[0].clientX - event.touches[1].clientX;
+const dy = event.touches[0].clientY - event.touches[1].clientY;
+distance = Math.sqrt(dx * dx + dy * dy);
+
+const delta = distance - prevDistance;
+camera.position.z = Math.max(10, Math.min(120, camera.position.z - delta * 0.1));
+
+prevDistance = distance;
+}
+}
+
+function handleTouchEnd() {
+isRotating = false;
+isDragging = false;
+}
+
+// イベントリスナー設定
+document.addEventListener('touchstart', handleTouchStart, { passive: false });
+document.addEventListener('touchmove', handleTouchMove, { passive: false });
+document.addEventListener('touchend', handleTouchEnd);
+
+// 速度ボタンのイベント
+document.querySelectorAll('.speed-btn').forEach(button => {
+button.addEventListener('click', function(e) {
+e.preventDefault();
+e.stopPropagation();
+
+document.querySelector('.speed-btn.active')?.classList.remove('active');
+this.classList.add('active');
+speedMultiplier = parseFloat(this.getAttribute('data-speed'));
+});
+});
+
+// 惑星ボタンのイベント
+document.querySelectorAll('.planet-btn').forEach(button => {
+button.addEventListener('click', function(e) {
+e.preventDefault();
+e.stopPropagation();
+
+const planetName = this.getAttribute('data-planet');
+showPlanetInfo(planetName);
+});
+});
+
+// 閉じるボタン
+document.getElementById('close-btn').addEventListener('click', function() {
+document.getElementById('info-panel').style.display = 'none';
+resetViewToSun();
+});
+
+// 惑星情報表示
+function showPlanetInfo(planetName) {
+const planet = planetData.find(p => p.name === planetName);
+if (planet) {
+document.getElementById('planet-name').textContent = planet.japName;
+
+let description = planet.description;
+if (planet.orbitPeriodDays > 0) {
+const yearsText = planet.orbitPeriodDays > 365 ?
+`（約${(planet.orbitPeriodDays / 365).toFixed(1)}年）` : '';
+
+description += `\n\n【現在の設定】\n速度: x${speedMultiplier}\n`;
+description += `このシミュレーションでは、1秒で地球時間の約${6 * speedMultiplier}時間が経過します。`;
+}
+
+document.getElementById('planet-desc').textContent = description;
+document.getElementById('info-panel').style.display = 'block';
+
+focusOnPlanetByName(planetName);
+}
+}
+
+// 惑星フォーカス
+function focusOnPlanetByName(planetName) {
+resetView();
+
+const planet = planets.find(p => p.name === planetName);
+if (planet) {
+const planetPos = new THREE.Vector3();
+planet.mesh.getWorldPosition(planetPos);
+
+const distance = planetName === "sun" ? 20 : 5;
+const height = planetName === "sun" ? 10 : 3;
+
+camera.position.set(planetPos.x + distance, height, distance);
+camera.lookAt(planetPos);
+}
+}
+
+// ビューリセット
+function resetView() {
+scene.rotation.set(0, 0, 0);
+}
+
+function resetViewToSun() {
+resetView();
+camera.position.set(0, 20, 80);
+camera.lookAt(0, 0, 0);
+}
+
+// ラベル更新
+function updateLabels() {
+planets.forEach(planet => {
+const label = labels[planet.name];
+if (label) {
+const vector = new THREE.Vector3();
+vector.setFromMatrixPosition(planet.mesh.matrixWorld);
+vector.project(camera);
+
+const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+const y = (vector.y * -0.5 + 0.5) * window.innerHeight;
+
+if (x > 0 && x < window.innerWidth && y > 0 && y < window.innerHeight) {
+label.style.left = x + 'px';
+label.style.top = (y - 20) + 'px';
+label.style.display = 'block';
+} else {
+label.style.display = 'none';
+}
+}
+});
+}
+
+// リサイズ処理
+window.addEventListener('resize', () => {
+camera.aspect = window.innerWidth / window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// アニメーション
+let elapsedTime = 0;
+const timeDisplayEl = document.getElementById('time-display');
+
+function animate() {
+requestAnimationFrame(animate);
+
+// 時間更新（速度調整が正しく適用される）
+elapsedTime += 0.016 * speedMultiplier;
+
+const earthDays = elapsedTime / 4;
+const days = Math.floor(earthDays);
+const hours = Math.floor((earthDays - days) * 24);
+
+timeDisplayEl.textContent = `時間: ${days}日 ${hours}時間 (x${speedMultiplier})`;
+
+// 惑星のアニメーション（速度調整が正しく適用される）
+planets.forEach((planet) => {
+// 自転
+planet.mesh.rotation.y += planet.rotationSpeed * speedMultiplier;
+
+// 雲の回転（地球の場合）
+if (planet.name === "earth" && planet.mesh.userData.clouds) {
+planet.mesh.userData.clouds.rotation.y += planet.rotationSpeed * 0.3 * speedMultiplier;
+}
+
+// 公転（太陽以外）
+if (planet.orbitRadius > 0) {
+const orbitSpeedFactor = planet.orbitPeriodDays > 0 ? (365 / planet.orbitPeriodDays) : 1;
+planet.orbitAngle += planet.orbitSpeed * speedMultiplier * orbitSpeedFactor;
+planet.mesh.position.x = Math.cos(planet.orbitAngle) * planet.orbitRadius;
+planet.mesh.position.z = Math.sin(planet.orbitAngle) * planet.orbitRadius;
+}
+});
+
+// ラベルの位置を更新
+updateLabels();
+
+// レンダリング
+renderer.render(scene, camera);
+}
+
+// 初期化
+resetViewToSun();
+animate();
+</script>
+
+
+</body>
+</html>
