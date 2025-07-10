@@ -135,7 +135,6 @@ transform: translate(-50%, -50%);
 <p id="planet-desc">説明が表示されます。</p>
 </div>
 
-```
 <div id="time-display">
 時間: 0日 0時間
 </div>
@@ -145,6 +144,10 @@ transform: translate(-50%, -50%);
 <button class="speed-btn" data-speed="2">速度 x2</button>
 <button class="speed-btn" data-speed="4">速度 x4</button>
 <button class="speed-btn" data-speed="8">速度 x8</button>
+<button class="speed-btn" data-speed="16">速度 x16</button>
+<button class="speed-btn" data-speed="32">速度 x32</button>
+<button class="speed-btn" data-speed="64">速度 x64</button>
+<button class="speed-btn" data-speed="128">速度 x128</button>
 </div>
 
 <div id="controls">
@@ -152,6 +155,7 @@ transform: translate(-50%, -50%);
 <button class="planet-btn" data-planet="mercury">水星</button>
 <button class="planet-btn" data-planet="venus">金星</button>
 <button class="planet-btn" data-planet="earth">地球</button>
+<button class="planet-btn" data-planet="moon">月</button>
 <button class="planet-btn" data-planet="mars">火星</button>
 <button class="planet-btn" data-planet="jupiter">木星</button>
 <button class="planet-btn" data-planet="saturn">土星</button>
@@ -203,6 +207,17 @@ orbitRadius: 20,
 isEarth: true,
 orbitPeriodDays: 365,
 description: "太陽系で3番目の惑星。生命が存在する唯一の天体として知られています。表面の約71%が水で覆われており、窒素と酸素を主成分とする大気があります。自転周期は約24時間、公転周期は約365.25日。内部は核、マントル、地殻の3層構造になっています。月を衛星として持っています。"
+},
+{
+name: "moon",
+japName: "月 (Moon)",
+radius: 0.35,
+color: 0xaaaaaa,
+rotationSpeed: 0.0034,
+orbitRadius: 3,
+orbitPeriodDays: 29.5,
+isMoon: true,
+description: "地球の唯一の天然衛星。直径は約3,474kmで地球の約1/4の大きさです。表面は多数のクレーターに覆われており、大気はほとんどありません。地球からの距離は約384,400kmで、同期自転をしているため地球からは常に同じ面しか見えません。月は地球の海の潮汐現象に大きな影響を与えており、地球の自転を安定させる重要な役割を果たしています。"
 },
 {
 name: "mars",
@@ -301,9 +316,15 @@ scene.add(starField);
 const planets = [];
 const orbits = [];
 const labels = {};
+let earthMesh = null;
+let moonMesh = null;
+let moonOrbit = null;
 
 // 惑星作成
 planetData.forEach((data) => {
+// 月の場合はスキップ（後で地球の子として作成）
+if (data.isMoon) return;
+
 // ラベル作成
 const label = document.createElement('div');
 label.className = 'planet-label';
@@ -332,23 +353,59 @@ const glow = new THREE.Mesh(glowGeo, glowMat);
 planetMesh.add(glow);
 
 } else if (data.isEarth) {
-// 地球
-const material = new THREE.MeshPhongMaterial({
-color: data.color,
-shininess: 15
-});
-planetMesh = new THREE.Mesh(geometry, material);
+// 地球の詳細テクスチャ作成
+const earthTexture = createEarthTexture();
+const earthBumpTexture = createEarthBumpTexture();
+const earthSpecularTexture = createEarthSpecularTexture();
+const earthNightTexture = createEarthNightTexture();
 
-// 雲
+const material = new THREE.MeshPhongMaterial({
+map: earthTexture,
+bumpMap: earthBumpTexture,
+bumpScale: 0.1,
+specularMap: earthSpecularTexture,
+specular: 0x111111,
+shininess: 25
+});
+
+// 夜間の光用マテリアル
+const nightMaterial = new THREE.MeshBasicMaterial({
+map: earthNightTexture,
+transparent: true,
+opacity: 0.6,
+blending: THREE.AdditiveBlending
+});
+
+planetMesh = new THREE.Mesh(geometry, material);
+const nightMesh = new THREE.Mesh(geometry, nightMaterial);
+planetMesh.add(nightMesh);
+
+// 大気の表現
+const atmosphereGeo = new THREE.SphereGeometry(data.radius * 1.02, 32, 32);
+const atmosphereMat = new THREE.MeshBasicMaterial({
+color: 0x87CEEB,
+transparent: true,
+opacity: 0.1,
+side: THREE.BackSide
+});
+const atmosphere = new THREE.Mesh(atmosphereGeo, atmosphereMat);
+planetMesh.add(atmosphere);
+
+// 雲の詳細テクスチャ
+const cloudTexture = createCloudTexture();
 const cloudGeo = new THREE.SphereGeometry(data.radius * 1.03, 32, 32);
 const cloudMat = new THREE.MeshBasicMaterial({
-color: 0xffffff,
+map: cloudTexture,
 transparent: true,
-opacity: 0.3
+opacity: 0.4,
+alphaTest: 0.1
 });
 const clouds = new THREE.Mesh(cloudGeo, cloudMat);
 planetMesh.add(clouds);
 planetMesh.userData.clouds = clouds;
+
+// 地球のメッシュを保存
+earthMesh = planetMesh;
 
 } else if (data.hasRings) {
 // 土星
@@ -415,6 +472,250 @@ scene.add(orbit);
 orbits.push(orbit);
 }
 });
+
+// 月の作成（地球の子として）
+if (earthMesh) {
+const moonData = planetData.find(p => p.isMoon);
+
+// 月のラベル作成
+const moonLabel = document.createElement('div');
+moonLabel.className = 'planet-label';
+moonLabel.textContent = moonData.japName;
+document.body.appendChild(moonLabel);
+labels["moon"] = moonLabel;
+
+// 月のメッシュ作成
+const moonGeometry = new THREE.SphereGeometry(moonData.radius, 32, 32);
+const moonMaterial = new THREE.MeshPhongMaterial({
+color: moonData.color,
+shininess: 5
+});
+moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
+moonMesh.position.x = moonData.orbitRadius;
+moonMesh.userData = { name: "moon" };
+
+// 月の軌道作成
+const moonOrbitGeo = new THREE.RingGeometry(moonData.orbitRadius - 0.02, moonData.orbitRadius + 0.02, 64);
+const moonOrbitMat = new THREE.MeshBasicMaterial({
+color: 0xcccccc,
+side: THREE.DoubleSide,
+transparent: true,
+opacity: 0.3
+});
+moonOrbit = new THREE.Mesh(moonOrbitGeo, moonOrbitMat);
+moonOrbit.rotation.x = Math.PI / 2;
+earthMesh.add(moonOrbit);
+
+// 月を地球の子として追加
+earthMesh.add(moonMesh);
+
+// 月の惑星データを追加
+const moonPlanetObj = {
+mesh: moonMesh,
+rotationSpeed: moonData.rotationSpeed,
+orbitRadius: moonData.orbitRadius,
+orbitSpeed: 0.02,
+orbitAngle: 0,
+orbitPeriodDays: moonData.orbitPeriodDays,
+name: "moon",
+parent: earthMesh
+};
+
+planets.push(moonPlanetObj);
+}
+
+// 地球の詳細テクスチャ作成関数
+function createEarthTexture() {
+const canvas = document.createElement('canvas');
+canvas.width = 1024;
+canvas.height = 512;
+const ctx = canvas.getContext('2d');
+
+// 海の基本色
+ctx.fillStyle = '#0066cc';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// 大陸の描画（簡略化した世界地図）
+ctx.fillStyle = '#228B22';
+drawContinents(ctx, canvas.width, canvas.height);
+
+// 氷冠の描画
+ctx.fillStyle = '#ffffff';
+drawPolarIceCaps(ctx, canvas.width, canvas.height);
+
+// 砂漠の描画
+ctx.fillStyle = '#daa520';
+drawDeserts(ctx, canvas.width, canvas.height);
+
+const texture = new THREE.CanvasTexture(canvas);
+texture.wrapS = THREE.RepeatWrapping;
+texture.wrapT = THREE.RepeatWrapping;
+return texture;
+}
+
+function createEarthBumpTexture() {
+const canvas = document.createElement('canvas');
+canvas.width = 512;
+canvas.height = 256;
+const ctx = canvas.getContext('2d');
+
+// 山脈の凹凸
+ctx.fillStyle = '#808080';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// ヒマラヤ山脈
+ctx.fillStyle = '#ffffff';
+drawMountainRanges(ctx, canvas.width, canvas.height);
+
+const texture = new THREE.CanvasTexture(canvas);
+texture.wrapS = THREE.RepeatWrapping;
+texture.wrapT = THREE.RepeatWrapping;
+return texture;
+}
+
+function createEarthSpecularTexture() {
+const canvas = document.createElement('canvas');
+canvas.width = 512;
+canvas.height = 256;
+const ctx = canvas.getContext('2d');
+
+// 海は反射、陸は反射なし
+ctx.fillStyle = '#ffffff'; // 海（反射する）
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+ctx.fillStyle = '#000000'; // 陸（反射しない）
+drawContinents(ctx, canvas.width, canvas.height);
+
+const texture = new THREE.CanvasTexture(canvas);
+texture.wrapS = THREE.RepeatWrapping;
+texture.wrapT = THREE.RepeatWrapping;
+return texture;
+}
+
+function createEarthNightTexture() {
+const canvas = document.createElement('canvas');
+canvas.width = 512;
+canvas.height = 256;
+const ctx = canvas.getContext('2d');
+
+// 夜間の背景
+ctx.fillStyle = '#000000';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// 都市の光
+ctx.fillStyle = '#ffff88';
+drawCityLights(ctx, canvas.width, canvas.height);
+
+const texture = new THREE.CanvasTexture(canvas);
+texture.wrapS = THREE.RepeatWrapping;
+texture.wrapT = THREE.RepeatWrapping;
+return texture;
+}
+
+function createCloudTexture() {
+const canvas = document.createElement('canvas');
+canvas.width = 512;
+canvas.height = 256;
+const ctx = canvas.getContext('2d');
+
+// 透明な背景
+ctx.fillStyle = 'rgba(0,0,0,0)';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// 雲の描画
+ctx.fillStyle = '#ffffff';
+drawClouds(ctx, canvas.width, canvas.height);
+
+const texture = new THREE.CanvasTexture(canvas);
+texture.wrapS = THREE.RepeatWrapping;
+texture.wrapT = THREE.RepeatWrapping;
+return texture;
+}
+
+function drawContinents(ctx, width, height) {
+// アフリカ大陸
+drawEllipse(ctx, width * 0.57, height * 0.6, width * 0.06, height * 0.3);
+
+// ヨーロッパ
+drawEllipse(ctx, width * 0.55, height * 0.35, width * 0.04, height * 0.08);
+
+// アジア
+drawEllipse(ctx, width * 0.7, height * 0.4, width * 0.15, height * 0.15);
+
+// 北米
+drawEllipse(ctx, width * 0.25, height * 0.35, width * 0.12, height * 0.2);
+
+// 南米
+drawEllipse(ctx, width * 0.32, height * 0.7, width * 0.06, height * 0.25);
+
+// オーストラリア
+drawEllipse(ctx, width * 0.8, height * 0.75, width * 0.06, height * 0.04);
+
+// グリーンランド
+drawEllipse(ctx, width * 0.4, height * 0.2, width * 0.03, height * 0.08);
+
+// 日本列島
+ctx.fillRect(width * 0.77, height * 0.42, width * 0.01, height * 0.06);
+
+// イギリス
+ctx.fillRect(width * 0.52, height * 0.32, width * 0.01, height * 0.02);
+}
+
+function drawPolarIceCaps(ctx, width, height) {
+// 北極
+ctx.fillRect(0, 0, width, height * 0.1);
+// 南極
+ctx.fillRect(0, height * 0.9, width, height * 0.1);
+}
+
+function drawDeserts(ctx, width, height) {
+// サハラ砂漠
+drawEllipse(ctx, width * 0.55, height * 0.45, width * 0.08, height * 0.06);
+// ゴビ砂漠
+drawEllipse(ctx, width * 0.72, height * 0.38, width * 0.06, height * 0.03);
+}
+
+function drawMountainRanges(ctx, width, height) {
+// ヒマラヤ山脈
+drawEllipse(ctx, width * 0.7, height * 0.43, width * 0.08, height * 0.02);
+// アンデス山脈
+ctx.fillRect(width * 0.3, height * 0.5, width * 0.01, height * 0.4);
+// ロッキー山脈
+ctx.fillRect(width * 0.22, height * 0.25, width * 0.01, height * 0.3);
+}
+
+function drawCityLights(ctx, width, height) {
+// 日本の都市
+ctx.fillRect(width * 0.77, height * 0.42, width * 0.005, height * 0.02);
+// 東海岸（アメリカ）
+ctx.fillRect(width * 0.28, height * 0.4, width * 0.01, height * 0.03);
+// ヨーロッパ
+ctx.fillRect(width * 0.52, height * 0.32, width * 0.06, height * 0.05);
+// 中国東部
+ctx.fillRect(width * 0.74, height * 0.43, width * 0.04, height * 0.03);
+// インド
+ctx.fillRect(width * 0.68, height * 0.48, width * 0.03, height * 0.04);
+}
+
+function drawClouds(ctx, width, height) {
+// 雲のパターン
+for (let i = 0; i < 20; i++) {
+const x = Math.random() * width;
+const y = Math.random() * height;
+const w = Math.random() * width * 0.1 + 20;
+const h = Math.random() * height * 0.05 + 10;
+
+ctx.globalAlpha = Math.random() * 0.8 + 0.2;
+drawEllipse(ctx, x, y, w, h);
+}
+ctx.globalAlpha = 1;
+}
+
+function drawEllipse(ctx, x, y, w, h) {
+ctx.beginPath();
+ctx.ellipse(x, y, w/2, h/2, 0, 0, 2 * Math.PI);
+ctx.fill();
+}
 
 // 速度制御
 let speedMultiplier = 1;
@@ -545,8 +846,8 @@ if (planet) {
 const planetPos = new THREE.Vector3();
 planet.mesh.getWorldPosition(planetPos);
 
-const distance = planetName === "sun" ? 20 : 5;
-const height = planetName === "sun" ? 10 : 3;
+const distance = planetName === "sun" ? 20 : planetName === "moon" ? 2 : 5;
+const height = planetName === "sun" ? 10 : planetName === "moon" ? 1 : 3;
 
 camera.position.set(planetPos.x + distance, height, distance);
 camera.lookAt(planetPos);
@@ -622,10 +923,19 @@ planet.mesh.userData.clouds.rotation.y += planet.rotationSpeed * 0.3 * speedMult
 
 // 公転（太陽以外）
 if (planet.orbitRadius > 0) {
+if (planet.name === "moon") {
+// 月の公転（地球を中心に）
+const orbitSpeedFactor = planet.orbitPeriodDays > 0 ? (29.5 / planet.orbitPeriodDays) : 1;
+planet.orbitAngle += planet.orbitSpeed * speedMultiplier * orbitSpeedFactor;
+planet.mesh.position.x = Math.cos(planet.orbitAngle) * planet.orbitRadius;
+planet.mesh.position.z = Math.sin(planet.orbitAngle) * planet.orbitRadius;
+} else {
+// 惑星の公転（太陽を中心に）
 const orbitSpeedFactor = planet.orbitPeriodDays > 0 ? (365 / planet.orbitPeriodDays) : 1;
 planet.orbitAngle += planet.orbitSpeed * speedMultiplier * orbitSpeedFactor;
 planet.mesh.position.x = Math.cos(planet.orbitAngle) * planet.orbitRadius;
 planet.mesh.position.z = Math.sin(planet.orbitAngle) * planet.orbitRadius;
+}
 }
 });
 
@@ -640,7 +950,6 @@ renderer.render(scene, camera);
 resetViewToSun();
 animate();
 </script>
-
 
 </body>
 </html>
